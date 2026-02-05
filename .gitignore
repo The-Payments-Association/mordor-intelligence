@@ -1,0 +1,40 @@
+# Virtual Environment
+venv/
+env/
+.venv/
+
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Data files (generated output)
+*.parquet
+*.csv
+*.pkl
+*.pickle
+
+# Log files
+*.log
+fetch_output.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Dependencies (optional - keep if you want to track them)
+# requirements.txt is tracked
+
+# Temporary files
+*.tmp
+.env
