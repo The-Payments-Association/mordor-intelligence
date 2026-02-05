@@ -1,0 +1,10 @@
+[
+  {
+    "timestamp": "2026-02-05T14:16:25.733968",
+    "url": "https://www.mordorintelligence.com/market-analysis/payments",
+    "method": "GET",
+    "status": 200,
+    "content_type": "text/html; charset=utf-8",
+    "size": 709738
+  }
+]
