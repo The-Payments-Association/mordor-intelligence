@@ -27,14 +27,13 @@ fetch_output.log
 *.swo
 *~
 .DS_Store
-.duckdb
-data
+
+
 
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 data/raw
-data/mordor.duckdb
 
 # Dependencies (optional - keep if you want to track them)
 # requirements.txt is tracked

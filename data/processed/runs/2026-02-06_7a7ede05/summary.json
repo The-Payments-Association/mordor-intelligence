@@ -1,0 +1,13 @@
+{
+  "run_id": "7a7ede05-a539-47b8-a634-92ded78fc9ce",
+  "timestamp": "2026-02-06T10:17:20.281222",
+  "total_reports": 1,
+  "stats": {
+    "total_urls": 40,
+    "successful": 1,
+    "errors": 0,
+    "new_reports": 1,
+    "versions_created": 0,
+    "no_changes": 0
+  }
+}
