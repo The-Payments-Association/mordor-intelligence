@@ -279,17 +279,24 @@ class ReportScraper:
     def _save_log_entry(self, entry: ScrapeLogEntry):
         """Save log entry to scrape_log table."""
         try:
+            # Generate log_id manually (max id + 1)
+            max_id_result = self.version_manager.conn.execute(
+                "SELECT COALESCE(MAX(log_id), 0) FROM scrape_log"
+            ).fetchone()
+            log_id = (max_id_result[0] if max_id_result else 0) + 1
+
             # Insert into database
             query = """
                 INSERT INTO scrape_log
-                (run_id, report_url, report_slug, status, status_message, error_type,
+                (log_id, run_id, report_url, report_slug, status, status_message, error_type,
                  http_status_code, response_time_ms, html_size_bytes,
                  fields_extracted, fields_changed, version_created,
                  started_at, completed_at, duration_seconds, retry_count)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
 
             self.version_manager.conn.execute(query, [
+                log_id,
                 entry.run_id,
                 entry.report_url,
                 entry.report_slug,

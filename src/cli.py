@@ -96,11 +96,15 @@ def history(slug: str, db: str):
         click.echo("-" * 80)
 
         for version in versions:
-            click.echo(f"\nVersion {version.version_number}:")
-            click.echo(f"  Reason: {version.snapshot_reason}")
-            click.echo(f"  Date: {version.scraped_at}")
-            if version.changed_fields:
-                click.echo(f"  Changed fields: {', '.join(version.changed_fields)}")
+            click.echo(f"\nVersion {version.get('version_number')}:")
+            click.echo(f"  Reason: {version.get('snapshot_reason')}")
+            click.echo(f"  Date: {version.get('scraped_at')}")
+            changed = version.get('changed_fields')
+            if changed:
+                if isinstance(changed, list):
+                    click.echo(f"  Changed fields: {', '.join(changed)}")
+                elif isinstance(changed, str):
+                    click.echo(f"  Changed fields: {changed}")
 
     except Exception as e:
         click.echo(f"✗ Error: {e}", err=True)
@@ -164,7 +168,7 @@ def stats(db: str):
         # Recent scrapes
         recent = conn.execute("""
             SELECT COUNT(DISTINCT run_id) FROM scrape_log
-            WHERE started_at > datetime('now', '-7 days')
+            WHERE started_at > current_timestamp - INTERVAL 7 day
         """).fetchone()[0]
         click.echo(f"Runs in last 7 days: {recent}")
 

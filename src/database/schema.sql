@@ -3,7 +3,7 @@
 
 -- Table 1: reports - Current state of all 153 reports
 CREATE TABLE IF NOT EXISTS reports (
-    id INTEGER PRIMARY KEY DEFAULT nextval('seq_reports'),
+    id INTEGER PRIMARY KEY,
     slug VARCHAR UNIQUE NOT NULL,
     url VARCHAR UNIQUE NOT NULL,
     title VARCHAR NOT NULL,
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS reports (
 
     -- Market Sizing
     market_size_current_value DECIMAL(20, 4),
-    market_size_current_unit VARCHAR,  -- "Billion", "Trillion"
+    market_size_current_unit VARCHAR,
     market_size_current_year INTEGER,
     market_size_current_currency VARCHAR DEFAULT 'USD',
 
@@ -44,23 +44,23 @@ CREATE TABLE IF NOT EXISTS reports (
     cloud_share_year INTEGER,
 
     -- Segments (JSON arrays)
-    transaction_types VARCHAR,  -- JSON array of strings
-    components VARCHAR,        -- JSON array
-    deployment_types VARCHAR,  -- JSON array
-    enterprise_sizes VARCHAR,  -- JSON array
-    end_user_industries VARCHAR,  -- JSON array
-    geographies VARCHAR,       -- JSON array
+    transaction_types VARCHAR,
+    components VARCHAR,
+    deployment_types VARCHAR,
+    enterprise_sizes VARCHAR,
+    end_user_industries VARCHAR,
+    geographies VARCHAR,
 
     -- Players
-    major_players VARCHAR,     -- JSON array of strings
+    major_players VARCHAR,
 
     -- Page metadata
     page_date_published TIMESTAMP,
     page_date_modified TIMESTAMP,
 
     -- FAQ and Images
-    faq_questions_answers VARCHAR,  -- JSON object
-    image_urls VARCHAR,             -- JSON array
+    faq_questions_answers VARCHAR,
+    image_urls VARCHAR,
 
     -- Tracking
     content_hash VARCHAR(64) NOT NULL,
@@ -78,7 +78,7 @@ CREATE INDEX IF NOT EXISTS idx_reports_region ON reports(region);
 
 -- Table 2: report_versions - Complete historical snapshots
 CREATE TABLE IF NOT EXISTS report_versions (
-    version_id INTEGER PRIMARY KEY DEFAULT nextval('seq_report_versions'),
+    version_id INTEGER PRIMARY KEY,
     report_id INTEGER NOT NULL,
     version_number INTEGER NOT NULL,
 
@@ -131,12 +131,10 @@ CREATE TABLE IF NOT EXISTS report_versions (
 
     -- Version metadata
     content_hash VARCHAR(64) NOT NULL,
-    snapshot_reason VARCHAR NOT NULL,  -- "new_report", "field_change"
-    changed_fields VARCHAR,  -- JSON array of field names that changed
+    snapshot_reason VARCHAR NOT NULL,
+    changed_fields VARCHAR,
     scraped_at TIMESTAMP NOT NULL,
 
-    -- Foreign key
-    FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE,
     UNIQUE (report_id, version_number)
 );
 
@@ -147,15 +145,15 @@ CREATE INDEX IF NOT EXISTS idx_versions_scraped_at ON report_versions(scraped_at
 
 -- Table 3: scrape_log - Operational logs
 CREATE TABLE IF NOT EXISTS scrape_log (
-    log_id INTEGER PRIMARY KEY DEFAULT nextval('seq_scrape_log'),
-    run_id VARCHAR NOT NULL,  -- UUID per run
+    log_id INTEGER PRIMARY KEY,
+    run_id VARCHAR NOT NULL,
     report_url VARCHAR NOT NULL,
     report_slug VARCHAR,
 
     -- Status
-    status VARCHAR NOT NULL,  -- "success", "error", "skipped"
+    status VARCHAR NOT NULL,
     status_message VARCHAR,
-    error_type VARCHAR,  -- "http_error", "parse_error", "timeout", etc.
+    error_type VARCHAR,
 
     -- HTTP metrics
     http_status_code INTEGER,
@@ -180,8 +178,3 @@ CREATE TABLE IF NOT EXISTS scrape_log (
 CREATE INDEX IF NOT EXISTS idx_scrape_log_run_id ON scrape_log(run_id);
 CREATE INDEX IF NOT EXISTS idx_scrape_log_status ON scrape_log(status);
 CREATE INDEX IF NOT EXISTS idx_scrape_log_started_at ON scrape_log(started_at);
-
--- Create sequences for auto-incrementing IDs
-CREATE SEQUENCE IF NOT EXISTS seq_reports START WITH 1;
-CREATE SEQUENCE IF NOT EXISTS seq_report_versions START WITH 1;
-CREATE SEQUENCE IF NOT EXISTS seq_scrape_log START WITH 1;

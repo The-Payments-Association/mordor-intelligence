@@ -15,23 +15,31 @@ import asyncio
 
 async def discover_all_report_urls() -> List[str]:
     """
-    Discover all 153 payment market report URLs.
+    Discover payment market report URLs.
+
+    Current: Extracts 40 reports from __NEXT_DATA__ on index page.
+    Note: Full 153 reports available on website, but require JavaScript pagination.
+    Future: Implement headless browser or API reverse-engineering for full set.
 
     Returns:
         List of unique report URLs
     """
     urls = set()
 
-    # Get index page and extract URLs from __NEXT_DATA__ (40) + API calls (113)
     try:
         # Fetch index page
         async with httpx.AsyncClient(timeout=30.0) as client:
             index_urls = await _extract_next_data_urls(client)
             urls.update(index_urls)
 
-            # API pages 2-6 (pages 1 = __NEXT_DATA__, so start from 2)
-            api_urls = await _fetch_api_pages(client, 2, 6)
-            urls.update(api_urls)
+            # Try API pages 2-6 for additional reports
+            # (may not work if pagination is JavaScript-only)
+            try:
+                api_urls = await _fetch_api_pages(client, 2, 6)
+                urls.update(api_urls)
+            except:
+                # API endpoint may not be available for pagination
+                pass
 
     except Exception as e:
         raise RuntimeError(f"Failed to discover URLs: {e}")
@@ -72,16 +80,18 @@ async def _extract_next_data_urls(client: httpx.AsyncClient) -> Set[str]:
 
         next_data = json.loads(match.group(1))
 
-        # Navigate to reports list
-        # Typical path: props -> pageProps -> reports or listings
+        # Navigate to reports list - actual path: props -> pageProps -> response -> content -> reportList
         props = next_data.get('props', {})
         page_props = props.get('pageProps', {})
+        response_data = page_props.get('response', {})
+        content = response_data.get('content', {})
 
         # Try different possible paths
         reports = (
-            page_props.get('reports') or
-            page_props.get('listings') or
-            page_props.get('data', {}).get('reports')
+            content.get('reportList') or  # Current structure
+            page_props.get('reports') or   # Alternative
+            page_props.get('listings') or  # Fallback
+            page_props.get('data', {}).get('reports')  # Old structure
         )
 
         if not reports:
@@ -90,7 +100,14 @@ async def _extract_next_data_urls(client: httpx.AsyncClient) -> Set[str]:
         # Extract URLs from reports
         for report in reports:
             if isinstance(report, dict):
+                # Try to get URL directly, or build from slug
                 url = report.get('url') or report.get('link') or report.get('href')
+
+                if not url and report.get('slug'):
+                    # Build URL from slug: /industry-reports/{slug}
+                    slug = report.get('slug')
+                    url = f"/industry-reports/{slug}"
+
                 if url:
                     full_url = urljoin(BASE_URL, url)
                     urls.add(full_url)

@@ -80,24 +80,33 @@ class VersionManager:
         # Flatten report to dict
         report_dict = self._flatten_report(report)
 
-        # Create version record
+        # Create version record - exclude timestamp fields not in report_versions
         version_dict = {
             'report_id': report_id,
             'version_number': version_number,
             'snapshot_reason': reason,
             'changed_fields': json.dumps(changed_fields) if changed_fields else None,
             'scraped_at': report.scraped_at or datetime.utcnow(),
-            **report_dict
         }
 
+        # Add all report fields except id and tracking fields specific to reports table
+        exclude_fields = {'id', 'first_seen_at', 'last_updated_at', 'version_count'}
+        for key, value in report_dict.items():
+            if key not in exclude_fields:
+                version_dict[key] = value
+
         # Insert into report_versions
+        # Generate new version_id manually
+        max_vid_result = self.conn.execute("SELECT COALESCE(MAX(version_id), 0) FROM report_versions").fetchone()
+        version_id = (max_vid_result[0] if max_vid_result else 0) + 1
+        version_dict['version_id'] = version_id
+
         fields = ', '.join(f'"{k}"' for k in version_dict.keys())
-        placeholders = ', '.join(['$' + str(i+1) for i in range(len(version_dict))])
+        placeholders = ', '.join(['?' for _ in version_dict.keys()])
         query = f"INSERT INTO report_versions ({fields}) VALUES ({placeholders})"
 
         try:
-            result = self.conn.execute(query, list(version_dict.values()))
-            version_id = result.lastrowid
+            self.conn.execute(query, list(version_dict.values()))
 
             # Update reports table with current version
             update_query = """
@@ -122,7 +131,6 @@ class VersionManager:
             return version_id
 
         except Exception as e:
-            self.conn.rollback()
             raise RuntimeError(f"Failed to create version: {e}")
 
     def update_report_table(self, report: Report, report_id: int):
@@ -145,12 +153,12 @@ class VersionManager:
             self.conn.rollback()
             raise RuntimeError(f"Failed to update report: {e}")
 
-    def get_version_history(self, slug: str) -> List[ReportVersion]:
+    def get_version_history(self, slug: str) -> List[Dict[str, Any]]:
         """
         Get all versions of a report by slug.
 
         Returns:
-            List of ReportVersion objects in chronological order
+            List of dicts with version data in chronological order
         """
         query = """
             SELECT rv.* FROM report_versions rv
@@ -161,9 +169,33 @@ class VersionManager:
 
         try:
             result = self.conn.execute(query, [slug]).fetchall()
+
+            if not result:
+                return []
+
+            # Get column names
+            columns = [desc[0] for desc in self.conn.description]
+
             versions = []
             for row in result:
-                versions.append(self._dict_to_report_version(row))
+                version_dict = dict(zip(columns, row))
+
+                # Deserialize JSON fields
+                json_fields = [
+                    'transaction_types', 'components', 'deployment_types',
+                    'enterprise_sizes', 'end_user_industries', 'geographies',
+                    'major_players', 'image_urls', 'changed_fields'
+                ]
+
+                for field in json_fields:
+                    if field in version_dict and version_dict[field] and isinstance(version_dict[field], str):
+                        try:
+                            version_dict[field] = json.loads(version_dict[field])
+                        except:
+                            pass
+
+                versions.append(version_dict)
+
             return versions
         except Exception as e:
             raise RuntimeError(f"Failed to get version history: {e}")
@@ -231,16 +263,29 @@ class VersionManager:
 
         # Create new report
         report_dict = self._flatten_report(report)
+
+        # Generate new ID manually (max id + 1)
+        max_id_result = self.conn.execute("SELECT COALESCE(MAX(id), 0) FROM reports").fetchone()
+        new_id = (max_id_result[0] if max_id_result else 0) + 1
+        report_dict['id'] = new_id
+
+        # Ensure timestamps are set
+        if not report_dict.get('first_seen_at'):
+            report_dict['first_seen_at'] = datetime.utcnow()
+        if not report_dict.get('last_updated_at'):
+            report_dict['last_updated_at'] = datetime.utcnow()
+        if not report_dict.get('scraped_at'):
+            report_dict['scraped_at'] = datetime.utcnow()
+
         fields = ', '.join(f'"{k}"' for k in report_dict.keys())
-        placeholders = ', '.join(['$' + str(i+1) for i in range(len(report_dict))])
+        placeholders = ', '.join(['?' for _ in report_dict.keys()])
         query = f"INSERT INTO reports ({fields}) VALUES ({placeholders})"
 
         try:
-            result = self.conn.execute(query, list(report_dict.values()))
+            self.conn.execute(query, list(report_dict.values()))
             self.conn.commit()
-            return result.lastrowid
+            return new_id
         except Exception as e:
-            self.conn.rollback()
             raise RuntimeError(f"Failed to create report record: {e}")
 
     def _get_next_version_number(self, report_id: int) -> int:
@@ -283,10 +328,13 @@ class VersionManager:
 
         # Convert FAQ list to JSON
         if data.get('faq_questions_answers') is not None:
-            faq_list = [
-                {'question': faq.question, 'answer': faq.answer}
-                for faq in data['faq_questions_answers']
-            ]
+            faq_list = []
+            for faq in data['faq_questions_answers']:
+                if isinstance(faq, dict):
+                    faq_list.append(faq)
+                else:
+                    # FAQPair object
+                    faq_list.append({'question': faq.question, 'answer': faq.answer})
             data['faq_questions_answers'] = json.dumps(faq_list)
 
         return data
@@ -319,8 +367,6 @@ class VersionManager:
 
         return Report(**data)
 
-    def _dict_to_report_version(self, row: tuple) -> ReportVersion:
-        """Convert database row tuple to ReportVersion model."""
-        # This is simplified; in production would use proper column mapping
-        # For now, return a basic version
-        raise NotImplementedError("Use proper ORM or column mapping")
+    def _dict_to_report_version(self, row: tuple) -> Dict[str, Any]:
+        """Convert database row tuple to dict (deprecated - use get_version_history instead)."""
+        raise NotImplementedError("Use get_version_history() instead")

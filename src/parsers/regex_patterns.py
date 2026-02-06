@@ -21,8 +21,9 @@ CAGR_PATTERN = re.compile(
 )
 
 # Company names: "Mastercard Inc.", "Visa Ltd.", etc.
+# Matches company name followed by Inc., Ltd., LLC, Corp., Corporation, Limited, Incorporated
 COMPANY_PATTERN = re.compile(
-    r'\b([A-Z][A-Za-z0-9\s&\-\.]+(?:Inc\.?|Ltd\.?|LLC|Corp\.?|Corporation|Limited|Incorporated))\b'
+    r'\b([A-Z][A-Za-z&\-]*(?:\s+[A-Z][A-Za-z&\-]*)*)\s+(Inc\.?|Ltd\.?|LLC|Corp\.?|Corporation|Limited|Incorporated)\b'
 )
 
 # Country + CAGR: "Colombia (7.41% CAGR)" or "India at 15.3% CAGR"
@@ -37,10 +38,10 @@ LEADING_SEGMENT_PATTERN = re.compile(
     re.IGNORECASE
 )
 
-# Cloud share: "68.34% of the market" or "Cloud deployment at 68.34%"
+# Cloud share: "68.34% of the market" or "Cloud deployments accounted for 68.34%"
 CLOUD_SHARE_PATTERN = re.compile(
-    r'(?:cloud|cloud-based)\s+(?:accounted for|held|represent).*?([0-9.]+)%\s*(?:of\s+(?:the\s+)?market)?',
-    re.IGNORECASE
+    r'cloud(?:\s+based)?(?:\s+deployment)?s?\s+(?:accounted\s+for|represent|held|account\s+for).*?([0-9.]+)%',
+    re.IGNORECASE | re.DOTALL
 )
 
 # Study period: "2022-2031" or "from 2022 to 2031"
@@ -51,8 +52,8 @@ STUDY_PERIOD_PATTERN = re.compile(
 
 # Fastest growing country/region: "fastest growing at 12.3%" or "highest CAGR 12.3%"
 FASTEST_GROWING_PATTERN = re.compile(
-    r'(?:fastest\s+growing|highest\s+(?:CAGR|growth))\s+(?:country|region|market)?\s*(?:is|:)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*(?:at|with)?\s*\(?([0-9.]+)%',
-    re.IGNORECASE
+    r'(?:fastest\s+growing|highest\s+(?:growth|CAGR)|most\s+rapidly\s+growing).*?\b(?:is\s+)?([A-Z][a-z]+)\s+(?:at|@|with)\s*\(?([0-9.]+)%',
+    re.IGNORECASE | re.DOTALL
 )
 
 # Temporal coverage: "2015-2025" or "2020-2030"
@@ -137,7 +138,8 @@ def extract_companies(text: str) -> List[str]:
 
     companies = []
     for match in COMPANY_PATTERN.finditer(text):
-        company = match.group(1).strip()
+        # Combine name (group 1) and suffix (group 2)
+        company = f"{match.group(1)} {match.group(2)}".strip()
         # Avoid duplicates
         if company not in companies:
             companies.append(company)
@@ -163,7 +165,7 @@ def extract_fastest_growing(text: str) -> Optional[Tuple[str, Decimal]]:
     except:
         return None, None
 
-    return country, cagr
+    return country, cagr if country else (None, None)
 
 
 def extract_leading_segment(text: str) -> Optional[Tuple[str, Optional[Decimal], Optional[Decimal]]]:
