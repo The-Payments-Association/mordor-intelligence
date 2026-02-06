@@ -1,6 +1,6 @@
 """
 URL discovery for 153 payment market reports.
-40 URLs from __NEXT_DATA__ + 113 URLs from API pagination.
+Uses Playwright for JavaScript rendering to get all reports including paginated ones.
 """
 
 import json
@@ -12,35 +12,42 @@ from urllib.parse import urljoin, urlparse
 from config.settings import BASE_URL, PAYMENTS_INDEX, USER_AGENT, REQUEST_DELAY
 import asyncio
 
+try:
+    from playwright.async_api import async_playwright
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
+
 
 async def discover_all_report_urls() -> List[str]:
     """
-    Discover payment market report URLs.
+    Discover payment market report URLs using Playwright for JavaScript rendering.
 
-    Current: Extracts 40 reports from __NEXT_DATA__ on index page.
-    Note: Full 153 reports available on website, but require JavaScript pagination.
-    Future: Implement headless browser or API reverse-engineering for full set.
+    Handles pagination to get all ~153 payment market reports.
+    Falls back to __NEXT_DATA__ extraction if Playwright not available.
 
     Returns:
         List of unique report URLs
     """
     urls = set()
 
+    # Try Playwright first (handles JavaScript pagination)
+    if PLAYWRIGHT_AVAILABLE:
+        try:
+            playwright_urls = await _discover_with_playwright()
+            urls.update(playwright_urls)
+            if len(urls) > 40:
+                print(f"✓ Playwright: Found {len(urls)} reports with pagination")
+                return list(urls)
+        except Exception as e:
+            print(f"⚠ Playwright failed ({e}), falling back to __NEXT_DATA__...")
+
+    # Fallback: Extract from __NEXT_DATA__ (only gets first 40)
     try:
-        # Fetch index page
         async with httpx.AsyncClient(timeout=30.0) as client:
             index_urls = await _extract_next_data_urls(client)
             urls.update(index_urls)
-
-            # Try API pages 2-6 for additional reports
-            # (may not work if pagination is JavaScript-only)
-            try:
-                api_urls = await _fetch_api_pages(client, 2, 6)
-                urls.update(api_urls)
-            except:
-                # API endpoint may not be available for pagination
-                pass
-
+            print(f"✓ __NEXT_DATA__: Found {len(index_urls)} reports")
     except Exception as e:
         raise RuntimeError(f"Failed to discover URLs: {e}")
 
@@ -50,6 +57,77 @@ async def discover_all_report_urls() -> List[str]:
     unique_urls.sort()
 
     return unique_urls
+
+
+async def _discover_with_playwright() -> Set[str]:
+    """
+    Use Playwright to render JavaScript and discover all reports including paginated ones.
+
+    Returns:
+        Set of report URLs
+    """
+    urls = set()
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch()
+        page = await browser.new_page()
+
+        try:
+            # Navigate to payments index
+            print(f"🌐 Opening {PAYMENTS_INDEX}...")
+            await page.goto(PAYMENTS_INDEX, wait_until='networkidle', timeout=60000)
+
+            # Get initial report count from page
+            report_elements = await page.locator('a[href*="/industry-reports/"]').all()
+            print(f"   Found {len(report_elements)} report links initially")
+
+            # Scroll through all pages to load all reports
+            # The site uses pagination, so we need to click "Load More" or similar
+            max_scrolls = 20
+            scroll_count = 0
+
+            while scroll_count < max_scrolls:
+                # Get current report count
+                current_reports = await page.locator('a[href*="/industry-reports/"]').all()
+
+                # Scroll to bottom to trigger pagination
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                await page.wait_for_timeout(1000)  # Wait for content to load
+
+                # Check if new reports loaded
+                new_reports = await page.locator('a[href*="/industry-reports/"]').all()
+
+                if len(new_reports) == len(current_reports):
+                    # No new reports loaded, we're done
+                    break
+
+                scroll_count += 1
+                print(f"   Scroll {scroll_count}: {len(new_reports)} reports found")
+
+                # Don't scroll too many times
+                if scroll_count > 1 and len(new_reports) > 150:
+                    break
+
+            # Extract all report URLs
+            final_reports = await page.locator('a[href*="/industry-reports/"]').all()
+            print(f"✓ Total reports found: {len(final_reports)}")
+
+            for element in final_reports:
+                try:
+                    href = await element.get_attribute('href')
+                    if href:
+                        full_url = urljoin(BASE_URL, href)
+                        urls.add(full_url)
+                except:
+                    pass
+
+        except Exception as e:
+            print(f"   Error during pagination: {e}")
+
+        finally:
+            await browser.close()
+
+    return urls
 
 
 async def _extract_next_data_urls(client: httpx.AsyncClient) -> Set[str]:
